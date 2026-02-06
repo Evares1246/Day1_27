@@ -1,27 +1,31 @@
 using Unity.Netcode;
 using UnityEngine;
+using GameDesign.Gameplay.Map;
 
 namespace GameDesign.Gameplay.Player
 {
     public class PlayerBrain : NetworkBehaviour
     {
-        // 核心同步数据：棋子在轨道上的位置索引
-        public NetworkVariable<int> PawnTileIndex = new NetworkVariable<int>(0,
-            NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        [Header("Synced Stats")]
+        public NetworkVariable<int> Gold = new NetworkVariable<int>(200);
+        public NetworkVariable<int> PawnTileIndex = new NetworkVariable<int>(0);
 
         [ServerRpc(InvokePermission = RpcInvokePermission.Everyone)]
-        public void RequestPawnMoveServerRpc(int steps)
+        public void RequestMovePawnServerRpc(int steps)
         {
-            if (Map.BoardManager.Instance == null) return;
+            if (!IsServer) return;
 
-            int totalTiles = Map.BoardManager.Instance.GetTotalTileCount();
-            PawnTileIndex.Value = (PawnTileIndex.Value + steps) % totalTiles;
+            int total = BoardManager.Instance.TotalTiles;
+            int nextIndex = (PawnTileIndex.Value + steps) % total;
+            PawnTileIndex.Value = nextIndex;
 
-            // 联动环境管理器的步数推进
+            // 推进全局步数（用于昼夜季节切换）
             if (EnvironmentManager.Instance != null)
             {
                 EnvironmentManager.Instance.AddGlobalStepsServerRpc(steps);
             }
+
+            Debug.Log($"[Server] Player {OwnerClientId} logic position: {nextIndex}");
         }
     }
 }

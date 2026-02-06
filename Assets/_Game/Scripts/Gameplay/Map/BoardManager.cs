@@ -1,86 +1,72 @@
 using UnityEngine;
+using System.Collections.Generic;
 using GameDesign.Utils;
 using GameDesign.Data;
-using System.Collections.Generic;
 
 namespace GameDesign.Gameplay.Map
 {
+    /// <summary>
+    /// 负责数学计算并生成正方形轨道路径点。
+    /// </summary>
     public class BoardManager : Singleton<BoardManager>
     {
-        [Header("Generation Settings")]
-        public float halfSideLength = 6.55f; // 边长的一半
-        public float tileSpacing = 1.31f;    // 地块间距 (必须能被总长整除以保证对齐)
-        public TileDataSO defaultTileSO;     // 默认填充地块
+        [Header("Generation Params")]
+        public float halfSideLength = 6.55f; // 正方形中心到边的距离
+        public float tileSpacing = 1.31f;    // 地块中心间距
+        public TileDataSO defaultTileData;
 
-        [Header("Runtime Data")]
-        public BoardTrack mainTrack = new BoardTrack();
+        [Header("Generated Data")]
+        public List<Vector3> TilePositions = new List<Vector3>();
+        public List<TileDataSO> TileLogicData = new List<TileDataSO>();
+
+        public int TotalTiles => TilePositions.Count;
 
         protected override void Awake()
         {
             base.Awake();
-            GenerateBoardData();
+            GenerateTrack();
         }
 
-        private void GenerateBoardData()
+        private void GenerateTrack()
         {
-            mainTrack.Tiles.Clear();
-            mainTrack.WorldPositions.Clear();
+            TilePositions.Clear();
+            TileLogicData.Clear();
 
-            // 计算单边可以放多少个间隔
-            int segmentsPerSide = Mathf.RoundToInt((halfSideLength * 2) / tileSpacing);
             float L = halfSideLength;
+            // 每边步数 = 总长度 / 间距 (13.1 / 1.31 = 10)
+            int steps = Mathf.RoundToInt((halfSideLength * 2) / tileSpacing);
 
-            // 按照 正方形 四条边生成：底边 -> 右边 -> 顶边 -> 左边
-            // 1. 底边 (Left-Bottom to Right-Bottom)
-            for (int i = 0; i < segmentsPerSide; i++)
-                AddTile(new Vector3(-L + i * tileSpacing, 0, -L));
+            // 按顺序生成正方形的四个边点：
+            // 底边 (Left-Bottom to Right-Bottom)
+            for (int i = 0; i < steps; i++) AddPoint(new Vector3(-L + i * tileSpacing, 0, -L));
+            // 右边 (Right-Bottom to Right-Top)
+            for (int i = 0; i < steps; i++) AddPoint(new Vector3(L, 0, -L + i * tileSpacing));
+            // 顶边 (Right-Top to Left-Top)
+            for (int i = 0; i < steps; i++) AddPoint(new Vector3(L - i * tileSpacing, 0, L));
+            // 左边 (Left-Top to Left-Bottom)
+            for (int i = 0; i < steps; i++) AddPoint(new Vector3(-L, 0, L - i * tileSpacing));
 
-            // 2. 右边 (Right-Bottom to Right-Top)
-            for (int i = 0; i < segmentsPerSide; i++)
-                AddTile(new Vector3(L, 0, -L + i * tileSpacing));
-
-            // 3. 顶边 (Right-Top to Left-Top)
-            for (int i = 0; i < segmentsPerSide; i++)
-                AddTile(new Vector3(L - i * tileSpacing, 0, L));
-
-            // 4. 左边 (Left-Top to Left-Bottom)
-            for (int i = 0; i < segmentsPerSide; i++)
-                AddTile(new Vector3(-L, 0, L - i * tileSpacing));
-
-            Debug.Log($"[BoardManager] 自动生成完成，总计 {mainTrack.Count} 个地块。");
+            Debug.Log($"[BoardManager] Track fully generated with {TotalTiles} tiles.");
         }
 
-        private void AddTile(Vector3 pos)
+        private void AddPoint(Vector3 pos)
         {
-            mainTrack.WorldPositions.Add(pos);
-            mainTrack.Tiles.Add(defaultTileSO); // 实际项目中这里可以按规律放入不同 SO
+            TilePositions.Add(pos);
+            TileLogicData.Add(defaultTileData);
         }
 
-        // 供 PlayerBrain 获取坐标
-        public Vector3 GetPositionByIndex(int index) => mainTrack.GetPosition(index);
-        public int GetTotalTileCount() => mainTrack.Count;
-
+        public Vector3 GetPosition(int index) => TilePositions[index % TotalTiles];
+        public TileDataSO GetTileData(int index) => TileLogicData[index % TotalTiles];
 
 #if UNITY_EDITOR
         private void OnDrawGizmos()
         {
-            if (mainTrack == null || mainTrack.WorldPositions.Count == 0)
+            if (TilePositions.Count == 0) return;
+            Gizmos.color = Color.yellow;
+            for (int i = 0; i < TilePositions.Count; i++)
             {
-                // 预览逻辑：如果没有运行，手动算一遍预览点
-                Gizmos.color = Color.yellow;
-                float L = halfSideLength;
-                Gizmos.DrawWireCube(Vector3.zero, new Vector3(L * 2, 0.1f, L * 2));
-                return;
-            }
-
-            Gizmos.color = Color.cyan;
-            for (int i = 0; i < mainTrack.WorldPositions.Count; i++)
-            {
-                Gizmos.DrawSphere(mainTrack.WorldPositions[i], 0.2f);
-                if (i < mainTrack.WorldPositions.Count - 1)
-                    Gizmos.DrawLine(mainTrack.WorldPositions[i], mainTrack.WorldPositions[i + 1]);
-                else
-                    Gizmos.DrawLine(mainTrack.WorldPositions[i], mainTrack.WorldPositions[0]);
+                Gizmos.DrawWireCube(TilePositions[i], new Vector3(1, 0.1f, 1));
+                Gizmos.DrawLine(TilePositions[i], TilePositions[(i + 1) % TilePositions.Count]);
             }
         }
 #endif

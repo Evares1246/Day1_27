@@ -3,82 +3,44 @@ using Unity.Netcode;
 using GameDesign.Gameplay.Map;
 using Cysharp.Threading.Tasks;
 
-namespace Game.Gameplay
+namespace GameDesign.Gameplay.Player
 {
     /// <summary>
-    /// 代表棋盘上的棋子 (Pawn)。
-    /// 仅由服务器控制移动，客户端同步位置。
+    /// 棋子逻辑控制器：仅由服务器执行，处理平滑移动的逻辑步进。
     /// </summary>
     public class PawnController : NetworkBehaviour
     {
-        [Header("Settings")]
-        [SerializeField] private float _moveSpeed = 5f;
-        [SerializeField] private float _jumpHeight = 0.5f;
+        private PlayerBrain _boundBrain;
 
-        // 棋子当前所在的格子索引
-        public NetworkVariable<int> CurrentTileIndex = new NetworkVariable<int>(0);
-        
-        // 归属的玩家ID (ClientID)
-        public NetworkVariable<ulong> OwnerClientId = new NetworkVariable<ulong>();
-
-        public override void OnNetworkSpawn()
+        public void Initialize(PlayerBrain brain)
         {
-            // 初始化位置
-            if (BoardManager.Instance != null)
-            {
-                SnapToTile(CurrentTileIndex.Value);
-            }
-            
-            CurrentTileIndex.OnValueChanged += OnTileIndexChanged;
-        }
-
-        public override void OnNetworkDespawn()
-        {
-            CurrentTileIndex.OnValueChanged -= OnTileIndexChanged;
-        }
-
-        private void OnTileIndexChanged(int oldIndex, int newIndex)
-        {
-            // 客户端位置平滑同步可以放在这里，或者使用 NetworkTransform
-            // 这里为了简单，直接瞬移或触发移动动画
-            if (!IsServer) 
-            {
-                // 客户端可以在这里播放移动动画
-                SnapToTile(newIndex); 
-            }
+            _boundBrain = brain;
         }
 
         /// <summary>
-        /// 瞬间移动到指定格子
-        /// </summary>
-        public void SnapToTile(int index)
-        {
-            if (BoardManager.Instance == null) return;
-            Vector3 targetPos = BoardManager.Instance.GetPositionByIndex(index);
-            transform.position = targetPos;
-        }
-
-        /// <summary>
-        /// (Server Only) 移动指定步数
+        /// (Server Only) 执行平滑的逐步移动动画，并更新逻辑索引
         /// </summary>
         public async UniTask MoveStepsAsync(int steps)
         {
-            if (!IsServer) return;
+            if (!IsServer || _boundBrain == null) return;
 
-            int totalTiles = BoardManager.Instance.GetTotalTileCount();
+            int totalTiles = BoardManager.Instance.TotalTiles;
             if (totalTiles == 0) return;
 
-            // 逐步移动动画逻辑 (简化版)
+            // 模拟大富翁逐步跳跃的逻辑
             for (int i = 0; i < steps; i++)
             {
-                int nextIndex = (CurrentTileIndex.Value + 1) % totalTiles;
-                CurrentTileIndex.Value = nextIndex;
-                
-                // 在服务器端也更新位置，确保物理/触发器正常
-                SnapToTile(nextIndex);
-                
-                // 等待一小段时间模拟跳跃/移动耗时
-                await UniTask.Delay(300); 
+                // 计算下一格索引
+                int nextIndex = (_boundBrain.PawnTileIndex.Value + 1) % totalTiles;
+
+                // 更新同步变量（这会自动触发所有客户端 Visualizer 的 OnMove）
+                _boundBrain.PawnTileIndex.Value = nextIndex;
+
+                // 服务器本地也更新物理坐标，以防触发地块检测
+                transform.position = BoardManager.Instance.GetPosition(nextIndex);
+
+                // 每跳一格等待一段时间，产生视觉上的连续跳跃感
+                await UniTask.Delay(400);
             }
         }
     }

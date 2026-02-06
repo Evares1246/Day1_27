@@ -8,9 +8,9 @@ namespace GameDesign.Gameplay
     {
         public Vector2 LookDelta { get; private set; }
 
-        // 修正：使用小写 on 开头以区分方法名
         public event Action onToggleView;
         public event Action onClick;
+        public event Action onUnlockCursor;
 
         private PlayerControls _controls;
 
@@ -24,11 +24,16 @@ namespace GameDesign.Gameplay
             _controls.Gameplay.Enable();
         }
 
-        private void OnDisable() => _controls?.Gameplay.Disable();
+        private void OnDisable()
+        {
+            _controls?.Gameplay.Disable();
+        }
 
-        public void OnLook(InputAction.CallbackContext context) => LookDelta = context.ReadValue<Vector2>();
+        public void OnLook(InputAction.CallbackContext context)
+        {
+            LookDelta = context.ReadValue<Vector2>();
+        }
 
-        // 这里是接口实现的方法，大写开头
         public void OnToggleView(InputAction.CallbackContext context)
         {
             if (context.performed) onToggleView?.Invoke();
@@ -37,6 +42,11 @@ namespace GameDesign.Gameplay
         public void OnClick(InputAction.CallbackContext context)
         {
             if (context.performed) onClick?.Invoke();
+        }
+
+        public void OnUnlockCursor(InputAction.CallbackContext context)
+        {
+            if (context.performed) onUnlockCursor?.Invoke();
         }
     }
 }

@@ -1,49 +1,43 @@
 using Unity.Netcode;
 using UnityEngine;
-using DG.Tweening;
+using Cysharp.Threading.Tasks;
 using GameDesign.Gameplay.Map;
 
 namespace GameDesign.Gameplay.Player
 {
     public class PawnEntity : NetworkBehaviour
     {
-        public NetworkVariable<ulong> OwnerId = new NetworkVariable<ulong>();
+        [Header("Binding Info")]
+        public NetworkVariable<ulong> OwnerId = new NetworkVariable<ulong>(999);
 
         private PlayerBrain _boundBrain;
+        private PawnVisualizer _visualizer;
 
         public override void OnNetworkSpawn()
         {
-            BindToBrain();
+            _visualizer = GetComponent<PawnVisualizer>();
+            WaitAndBind().Forget();
         }
 
-        private void BindToBrain()
+        private async UniTaskVoid WaitAndBind()
         {
-            // 在当前所有已连接的玩家对象中寻找我的主人
-            foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+            // 顶级开发者习惯：使用异步等待而非 Coroutine，更易读且性能更好
+            while (!NetworkManager.Singleton.ConnectedClients.ContainsKey(OwnerId.Value))
             {
-                if (client.ClientId == OwnerId.Value)
-                {
-                    _boundBrain = client.PlayerObject.GetComponent<PlayerBrain>();
-                    _boundBrain.PawnTileIndex.OnValueChanged += OnPawnIndexChanged;
-
-                    // 初始位置对齐到轨道
-                    UpdateVisualPositionInstant();
-                    break;
-                }
+                await UniTask.Delay(100);
             }
-        }
 
-        private void OnPawnIndexChanged(int oldVal, int newVal)
-        {
-            Vector3 targetPos = BoardManager.Instance.GetPositionByIndex(newVal);
-            transform.DOJump(targetPos, 1.2f, 1, 0.5f).SetEase(Ease.OutQuad);
-        }
-
-        private void UpdateVisualPositionInstant()
-        {
-            if (BoardManager.Instance != null && _boundBrain != null)
+            var client = NetworkManager.Singleton.ConnectedClients[OwnerId.Value];
+            if (client.PlayerObject != null)
             {
-                transform.position = BoardManager.Instance.GetPositionByIndex(_boundBrain.PawnTileIndex.Value);
+                _boundBrain = client.PlayerObject.GetComponent<PlayerBrain>();
+
+                // 给 Visualizer 注入数据源
+                if (_visualizer != null) _visualizer.Initialize(_boundBrain);
+
+                // 初始对齐坐标
+                transform.position = BoardManager.Instance.GetPosition(_boundBrain.PawnTileIndex.Value);
+                Debug.Log($"[Pawn] Succesfully bound to Player {OwnerId.Value}");
             }
         }
     }

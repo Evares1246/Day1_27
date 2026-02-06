@@ -1,113 +1,54 @@
-using UnityEngine;
 using Unity.Netcode;
-using Game.Core;
+using UnityEngine;
+using GameDesign.Utils;
 
-namespace Game.Gameplay.TurnSystem
+namespace GameDesign.Gameplay.TurnSystem
 {
-    public enum TurnPhase
+    /// <summary>
+    /// 全局回合管理器：控制游戏整体进度和玩家轮转。
+    /// </summary>
+    [RequireComponent(typeof(NetworkObject))]
+    public class TurnManager : Singleton_N<TurnManager>
     {
-        StartTurn,
-        RollDice,
-        Move,
-        Event,
-        EndTurn
-    }
-
-    public class TurnManager : NetworkBehaviour
-    {
-        public static TurnManager Instance { get; private set; }
-
-        public NetworkVariable<int> CurrentPlayerIndex = new NetworkVariable<int>(0);
-        public NetworkVariable<TurnPhase> CurrentPhase = new NetworkVariable<TurnPhase>(TurnPhase.StartTurn);
-
-        private void Awake()
-        {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
-        }
+        [Header("Sync States")]
+        public NetworkVariable<bool> IsGameStarted = new NetworkVariable<bool>(false);
+        public NetworkVariable<ulong> ActivePlayerClientId = new NetworkVariable<ulong>(0);
+        public NetworkVariable<int> TurnCount = new NetworkVariable<int>(1);
 
         public override void OnNetworkSpawn()
         {
-            // 不要自动开始
-            // if (IsServer)
-            // {
-            //     StartTurn();
-            // }
+            base.OnNetworkSpawn();
+            Debug.Log($"[TurnManager] Network Spawned. Role: {(IsServer ? "Server/Host" : "Client")}");
         }
 
-        public override void OnNetworkDespawn()
+        /// <summary>
+        /// 供 UI 调用：通过服务器正式开启赌局
+        /// </summary>
+        [ServerRpc(InvokePermission = RpcInvokePermission.Everyone)]
+        public void StartGameServerRpc()
         {
-            // 清理代码 (如果有)
-        }
-
-        public void StartGame()
-        {
+            // 顶级开发者习惯：双重验证
             if (!IsServer) return;
-            // 初始化玩家列表等
-            StartTurn();
+            if (IsGameStarted.Value) return;
+
+            IsGameStarted.Value = true;
+
+            // 默认设置第一个连入的玩家（通常是 Host）为起始玩家
+            if (NetworkManager.Singleton.ConnectedClientsIds.Count > 0)
+            {
+                ActivePlayerClientId.Value = NetworkManager.Singleton.ConnectedClientsIds[0];
+            }
+
+            Debug.Log("<color=green>[TurnManager] The soul gambling has officially begun!</color>");
         }
 
-        public void StartTurn()
-        {
-            if (!IsServer) return;
-            CurrentPhase.Value = TurnPhase.StartTurn;
-            Debug.Log($"[TurnManager] Player {CurrentPlayerIndex.Value} Turn Started");
-            
-            // Auto transition to Roll for now
-            CurrentPhase.Value = TurnPhase.RollDice;
-        }
-
-        public void EndTurn()
-        {
-            if (!IsServer) return;
-            
-            // Move to next player
-            // Assuming 4 players for now, need PlayerManager to get actual count
-            int playerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
-            if (playerCount == 0) playerCount = 1; // Fallback
-
-            CurrentPlayerIndex.Value = (CurrentPlayerIndex.Value + 1) % playerCount;
-            
-            // Check for Day Cycle (if looped back to 0, or based on steps)
-            // For now, simple round robin
-            
-            StartTurn();
-        }
-
-        // Called by UI or Player Input
         [ServerRpc(InvokePermission = RpcInvokePermission.Everyone)]
         public void RollDiceServerRpc(ulong clientId)
         {
-            // TODO: 验证是否是当前玩家 (CurrentPlayerIndex 对应的 ClientId)
-            
-            int roll = Random.Range(1, 7);
-            Debug.Log($"[TurnManager] Player {clientId} Rolled {roll}");
-            
-            CurrentPhase.Value = TurnPhase.Move;
-            
-            // 查找属于该 Client 的 Pawn 并移动
-            // 这里假设我们有一个 PawnManager 或者简单的查找逻辑
-            MovePlayerPawn(clientId, roll);
-        }
+            if (!IsServer || !IsGameStarted.Value) return;
+            if (clientId != ActivePlayerClientId.Value) return;
 
-        private async void MovePlayerPawn(ulong clientId, int steps)
-        {
-            // 简单的查找逻辑: 遍历所有 PawnController 找到 Owner 匹配的
-            // 实际项目中应该缓存这个映射
-            foreach (var pawn in FindObjectsByType<PawnController>(FindObjectsSortMode.None))
-            {
-                if (pawn.OwnerClientId.Value == clientId)
-                {
-                    await pawn.MoveStepsAsync(steps);
-                    // 移动完成后，触发事件或结束回合
-                    // EndTurn(); // 暂时自动结束回合用于测试
-                    break;
-                }
-            }
+            Debug.Log($"[Server] Player {clientId} is authorized to roll.");
         }
     }
 }

@@ -75,6 +75,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameDesign.Gameplay.Player.PlayerBrain
   ShowTopMostFoldoutHeaderGroup: 1
+  Gold:
+    m_InternalValue: 200
   PawnTileIndex:
     m_InternalValue: 0
 --- !u!114 &7133053645738483262
@@ -105,6 +107,11 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   _eyeStoneView: {fileID: 3029494291131994991}
   _eagleView: {fileID: 8505136494211133655}
+  _lookSensitivity: 0.2
+  _maxVerticalAngle: 60
+  _interactableLayer:
+    serializedVersion: 2
+    m_Bits: 0
 --- !u!114 &6550708745869856709
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -280,7 +287,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &4411237290603607019
 Transform:
   m_ObjectHideFlags: 0
